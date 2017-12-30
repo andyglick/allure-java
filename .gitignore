@@ -4,9 +4,10 @@ build
 /*/allure-results/
 
 #IDEA Files
-.idea
+.idea/
 *.iml
 *.ipr
+*.iws
 
 #Eclipse files
 *.settings
