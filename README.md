@@ -55,6 +55,23 @@ To use JUnit 5 simply add the following dependency to your project:
 </dependency>
 ```
 
+## Selenide
+
+Listener for Selenide, that logging steps for Allure:
+
+```xml
+<dependency>
+   <groupId>io.qameta.allure</groupId>
+   <artifactId>allure-selenide</artifactId>
+   <version>$LATEST_VERSION</version>
+</dependency>
+```
+
+Usage example:
+```
+SelenideLogger.addListener("AllureSelenide", new AllureSelenide().screenshots(true).savePageSource(false));
+```
+
 
 ## Rest Assured
 
@@ -77,25 +94,45 @@ You can specify custom templateName:
 .filter(new AllureRestAssured().withTemplate("/templates/custom_template.ftl"))
 ```
 
-## Retrofit
+## OkHttp
 
-Interceptor for retrofit http client, that generates attachment for allure.
+Interceptor for OkHttp client, that generates attachment for allure.
 
 ```xml
 <dependency>
    <groupId>io.qameta.allure</groupId>
-   <artifactId>allure-retrofit</artifactId>
+   <artifactId>allure-okhttp3</artifactId>
    <version>$LATEST_VERSION</version>
 </dependency>
 ```
 
 Usage example:
 ```
-.addInterceptor(new AllureLoggingInterceptor())
+.addInterceptor(new AllureOkHttp3())
 ```
-You can specify custom templateName:
+You can specify custom templates, which should be placed in src/main/resources/tpl folder:
 ```
-.addInterceptor(new AllureLoggingInterceptor().withTemplate("/templates/custom_template.ftl"))
+.addInterceptor(new AllureOkHttp3()
+                .withRequestTemplate("custom-http-request.ftl")
+                .withResponseTemplate("custom-http-response.ftl"))
+
 ```
 
+## Http client
+
+Interceptors for Apache HTTP client, that generates attachment for allure.
+
+```xml
+<dependency>
+   <groupId>io.qameta.allure</groupId>
+   <artifactId>allure-httpclient</artifactId>
+   <version>$LATEST_VERSION</version>
+</dependency>
+```
+
+Usage example:
+```
+.addInterceptorFirst(new AllureHttpClientRequest())
+.addInterceptorLast(new AllureHttpClientResponse());
+```
 

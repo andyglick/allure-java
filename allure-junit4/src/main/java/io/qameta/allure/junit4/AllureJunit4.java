@@ -45,13 +45,17 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  * Allure Junit4 listener.
  */
 @RunListener.ThreadSafe
-@SuppressWarnings({"PMD.ExcessiveImports", "PMD.CouplingBetweenObjects"})
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.CouplingBetweenObjects", "checkstyle:ClassFanOutComplexity"})
 public class AllureJunit4 extends RunListener {
 
     public static final String MD_5 = "md5";
 
-    private final ThreadLocal<String> testCases
-            = InheritableThreadLocal.withInitial(() -> UUID.randomUUID().toString());
+    private final ThreadLocal<String> testCases = new InheritableThreadLocal<String>() {
+        @Override
+        protected String initialValue() {
+            return UUID.randomUUID().toString();
+        }
+    };
 
     private final AllureLifecycle lifecycle;
 
@@ -194,7 +198,7 @@ public class AllureJunit4 extends RunListener {
 
     @SuppressWarnings("unchecked")
     private <T extends Annotation> List<T> extractRepeatable(final Description result, final Class<T> clazz) {
-        if (clazz.isAnnotationPresent(Repeatable.class)) {
+        if (clazz != null && clazz.isAnnotationPresent(Repeatable.class)) {
             final Repeatable repeatable = clazz.getAnnotation(Repeatable.class);
             final Class<? extends Annotation> wrapper = repeatable.value();
             final Annotation annotation = result.getAnnotation(wrapper);
@@ -214,6 +218,7 @@ public class AllureJunit4 extends RunListener {
     private <T extends Annotation> List<T> getAnnotationsOnClass(final Description result, final Class<T> clazz) {
         return Stream.of(result)
                 .map(Description::getTestClass)
+                .filter(Objects::nonNull)
                 .map(testClass -> testClass.getAnnotationsByType(clazz))
                 .flatMap(Stream::of)
                 .collect(Collectors.toList());
@@ -237,7 +242,7 @@ public class AllureJunit4 extends RunListener {
     }
 
     private String getPackage(final Class<?> testClass) {
-        return Optional.of(testClass)
+        return Optional.ofNullable(testClass)
                 .map(Class::getPackage)
                 .map(Package::getName)
                 .orElse("");
@@ -255,7 +260,8 @@ public class AllureJunit4 extends RunListener {
         final String methodName = description.getMethodName();
         final String name = Objects.nonNull(methodName) ? methodName : className;
         final String fullName = Objects.nonNull(methodName) ? String.format("%s.%s", className, methodName) : className;
-        final String suite = Optional.ofNullable(description.getTestClass().getAnnotation(DisplayName.class))
+        final String suite = Optional.ofNullable(description.getTestClass())
+                .map(it -> it.getAnnotation(DisplayName.class))
                 .map(DisplayName::value).orElse(className);
 
         final TestResult testResult = new TestResult()
@@ -279,3 +285,4 @@ public class AllureJunit4 extends RunListener {
     }
 
 }
+

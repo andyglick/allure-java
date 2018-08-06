@@ -4,6 +4,7 @@ import io.qameta.allure.AllureLifecycle;
 import io.qameta.allure.aspects.StepsAspects;
 import io.qameta.allure.junit4.samples.AssumptionFailedTest;
 import io.qameta.allure.junit4.samples.BrokenTest;
+import io.qameta.allure.junit4.samples.BrokenWithoutMessageTest;
 import io.qameta.allure.junit4.samples.FailedTest;
 import io.qameta.allure.junit4.samples.IgnoredClassTest;
 import io.qameta.allure.junit4.samples.IgnoredTests;
@@ -11,6 +12,7 @@ import io.qameta.allure.junit4.samples.OneTest;
 import io.qameta.allure.junit4.samples.TaggedTests;
 import io.qameta.allure.junit4.samples.TestWithAnnotations;
 import io.qameta.allure.junit4.samples.TestWithSteps;
+import io.qameta.allure.junit4.samples.TestWithTimeout;
 import io.qameta.allure.model.Label;
 import io.qameta.allure.model.Link;
 import io.qameta.allure.model.Stage;
@@ -113,6 +115,23 @@ public class FeatureCombinationsTest {
                 .hasSize(1)
                 .extracting(TestResult::getStatus)
                 .containsExactly(Status.BROKEN);
+        assertThat(testResults.get(0).getStatusDetails())
+                .hasFieldOrPropertyWithValue("message","Hello, everybody")
+                .hasFieldOrProperty("trace");
+    }
+
+    @Test
+    @DisplayName("Broken test without message")
+    public void shouldProcessBrokenWithoutMessageTest() throws Exception {
+        core.run(Request.aClass(BrokenWithoutMessageTest.class));
+        List<TestResult> testResults = results.getTestResults();
+        assertThat(testResults)
+                .hasSize(1)
+                .extracting(TestResult::getStatus)
+                .containsExactly(Status.BROKEN);
+        assertThat(testResults.get(0).getStatusDetails())
+                .hasFieldOrPropertyWithValue("message","java.lang.RuntimeException")
+                .hasFieldOrProperty("trace");
     }
 
     @Test
@@ -170,6 +189,19 @@ public class FeatureCombinationsTest {
                 .hasSize(3)
                 .extracting(StepResult::getName)
                 .containsExactly("step1", "step2", "step3");
+    }
+
+    @Test
+    @DisplayName("Test with timeout and steps")
+    public void testWithTimeoutAndSteps() {
+        core.run(Request.aClass(TestWithTimeout.class));
+        List<TestResult> testResults = results.getTestResults();
+        assertThat(testResults)
+                .hasSize(1)
+                .flatExtracting(TestResult::getSteps)
+                .hasSize(2)
+                .extracting(StepResult::getName)
+                .containsExactly("Step 1", "Step 2");
     }
 
     @Test

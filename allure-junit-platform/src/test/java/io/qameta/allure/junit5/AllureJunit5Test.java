@@ -208,6 +208,60 @@ public class AllureJunit5Test {
         softly.assertAll();
     }
 
+    @Test
+    void shouldProcessTestClassDisplayNameByAnnotation() {
+        runClasses(TestsClassWithDisplayNameAnnotation.class);
+
+        final List<TestResult> testResults = results.getTestResults();
+        assertThat(testResults)
+                .hasSize(1);
+
+        final List<Label> testResultLabels = testResults.get(0).getLabels();
+        assertThat(testResultLabels)
+                .filteredOn(label -> "suite".equals(label.getName()))
+                .hasSize(1)
+                .flatExtracting(Label::getValue)
+                .contains("Display name of test class");
+    }
+
+    @Test
+    void shouldProcessDefaultTestClassDisplayName() {
+        runClasses(TestsClassWithoutDisplayNameAnnotation.class);
+
+        final List<TestResult> testResults = results.getTestResults();
+        assertThat(testResults)
+                .hasSize(1);
+
+        final List<Label> testResultLabels = testResults.get(0).getLabels();
+        assertThat(testResultLabels)
+                .filteredOn(label -> "suite".equals(label.getName()))
+                .hasSize(1)
+                .flatExtracting(Label::getValue)
+                .contains("io.qameta.allure.junit5.features.TestsClassWithoutDisplayNameAnnotation");
+    }
+
+    @Test
+    void shouldProcessJunit5Description() {
+        runClasses(TestsWithDescriptions.class);
+
+        final List<TestResult> testResults = results.getTestResults();
+        assertThat(testResults)
+                .hasSize(1)
+                .flatExtracting(TestResult::getDescription)
+                .contains("Test description");
+    }
+
+    @Test
+    void shouldProcessDisabledTests() {
+        runClasses(DisabledTests.class);
+
+        final List<TestResult> testResults = results.getTestResults();
+        assertThat(testResults)
+                .hasSize(1)
+                .first()
+                .hasFieldOrPropertyWithValue("status", Status.SKIPPED);
+    }
+
     private void runClasses(Class<?>... classes) {
         final ClassSelector[] classSelectors = Stream.of(classes)
                 .map(DiscoverySelectors::selectClass)

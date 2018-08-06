@@ -25,7 +25,7 @@ import static io.qameta.allure.util.ResultsUtils.getThreadName;
 /**
  * Scenario labels and links builder.
  */
-@SuppressWarnings("CyclomaticComplexity")
+@SuppressWarnings({"CyclomaticComplexity", "PMD.CyclomaticComplexity", "PMD.NcssCount"})
 class LabelBuilder {
     private static final Logger LOGGER = LoggerFactory.getLogger(LabelBuilder.class);
     private static final String COMPOSITE_TAG_DELIMITER = "=";
@@ -77,7 +77,7 @@ class LabelBuilder {
                         getScenarioLinks().add(ResultsUtils.createIssueLink(tagValue));
                         break;
                     case PLAIN_LINK:
-                        getScenarioLinks().add(ResultsUtils.createLink(null, null, tagValue, null));
+                        getScenarioLinks().add(ResultsUtils.createLink(null, tagValue, tagValue, null));
                         break;
                     default:
                         LOGGER.warn("Composite tag {} is not supported. adding it as RAW", tagKey);

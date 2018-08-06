@@ -2,6 +2,8 @@ package io.qameta.allure.testng.samples;
 
 import io.qameta.allure.Description;
 import io.qameta.allure.Step;
+import org.testng.annotations.BeforeClass;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 /**
@@ -9,6 +11,23 @@ import org.testng.annotations.Test;
  */
 public class DescriptionsTest {
 
+    /**
+     * Before class description
+     */
+    @BeforeClass
+    @Description(useJavaDoc = true)
+    public void setUpClass() {
+
+    }
+
+    /**
+     * Before method description
+     */
+    @BeforeMethod
+    @Description(useJavaDoc = true)
+    public void setUpMethod() {
+
+    }
 
     /**
      * Sample test description
@@ -20,10 +39,22 @@ public class DescriptionsTest {
     }
 
     /**
+     * Sample test description
+     * - next line
+     * - another line
+     */
+    @Description(useJavaDoc = true)
+    @Test
+    public void testSeparated() {
+        step();
+    }
+
+    /**
      * Sample step description
      */
     @Description(useJavaDoc = true)
     @Step("Step one")
     private void step() {
     }
+
 }

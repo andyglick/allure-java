@@ -35,7 +35,9 @@ import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import static io.qameta.allure.util.ResultsUtils.ALLURE_SEPARATE_LINES_SYSPROP;
 import static java.lang.String.format;
+import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -93,8 +95,60 @@ public class AllureTestNgTest {
         assertThat(testResult)
                 .flatExtracting(TestResult::getSteps)
                 .hasSize(1)
-                .flatExtracting(StepResult::getStatus)
+                .extracting(StepResult::getStatus)
                 .contains(Status.PASSED);
+    }
+
+    @Feature("Basic framework support")
+    @Test(description = "Test with timeout")
+    public void testWithTimeout() {
+        final String testNameWithTimeout = "testWithTimeout";
+        final String testNameWithoutTimeout = "testWithoutTimeout";
+        runTestNgSuites("suites/tests-with-timeout.xml");
+        List<TestResult> testResults = results.getTestResults();
+
+        assertThat(testResults)
+                .as("Test case results have not been written")
+                .hasSize(2)
+                .as("Unexpectedly passed status or stage of tests")
+                .allMatch(testResult -> testResult.getStatus().equals(Status.PASSED) &&
+                        testResult.getStage().equals(Stage.FINISHED))
+                .extracting(TestResult::getName)
+                .as("Unexpectedly passed name of tests")
+                .containsOnlyElementsOf(asList(
+                        testNameWithoutTimeout,
+                        testNameWithTimeout));
+        assertThat(testResults)
+                .flatExtracting(TestResult::getSteps)
+                .as("No steps present for test with timeout")
+                .hasSize(2)
+                .extracting(StepResult::getName)
+                .containsOnlyElementsOf(asList(
+                        "Step of the test with timeout",
+                        "Step of the test with no timeout"));
+    }
+
+    @Feature("Descriptions")
+    @Test(description = "Javadoc descriptions with line separation")
+    public void descriptionsWithLineSeparationTest() {
+        String initialSeparateLines = System.getProperty(ALLURE_SEPARATE_LINES_SYSPROP);
+        if (!Boolean.parseBoolean(initialSeparateLines)) {
+            System.setProperty(ALLURE_SEPARATE_LINES_SYSPROP, "true");
+        }
+        try {
+            final String testDescription = "Sample test description<br /> - next line<br /> - another line<br />";
+            runTestNgSuites("suites/descriptions-test.xml");
+            List<TestResult> testResult = results.getTestResults();
+
+            assertThat(testResult).as("Test case result has not been written")
+                    .hasSize(2)
+                    .filteredOn(result -> result.getName().equals("testSeparated"))
+                    .extracting(result -> result.getDescriptionHtml().trim())
+                    .as("Javadoc description of test case has not been processed correctly")
+                    .contains(testDescription);
+        } finally {
+            System.setProperty(ALLURE_SEPARATE_LINES_SYSPROP, String.valueOf(initialSeparateLines));
+        }
     }
 
     @Feature("Descriptions")
@@ -105,10 +159,51 @@ public class AllureTestNgTest {
         List<TestResult> testResult = results.getTestResults();
 
         assertThat(testResult).as("Test case result has not been written")
-                .hasSize(1).first()
+                .hasSize(2)
+                .filteredOn(result -> result.getName().equals("test"))
                 .extracting(result -> result.getDescriptionHtml().trim())
                 .as("Javadoc description of test case has not been processed")
                 .contains(testDescription);
+    }
+
+    @Feature("Descriptions")
+    @Test(description = "Javadoc descriptions of befores")
+    public void descriptionsBefores() {
+        final String beforeClassDescription = "Before class description";
+        final String beforeMethodDescription = "Before method description";
+        runTestNgSuites("suites/descriptions-test.xml");
+        List<TestResultContainer> testContainers = results.getTestContainers();
+
+        assertThat(testContainers).as("Test containers has not been written")
+                .isNotEmpty()
+                .filteredOn(container -> !container.getBefores().isEmpty())
+                .extracting(container -> container.getBefores().get(0).getDescriptionHtml().trim())
+                .as("Javadoc descriptions of befores have not been processed")
+                .containsOnly(beforeClassDescription, beforeMethodDescription);
+    }
+
+    @Feature("Descriptions")
+    @Test(description = "Javadoc descriptions of befores with the same names")
+    public void javadocDescriptionsOfBeforesWithTheSameNames() {
+        runTestNgSuites("suites/descriptions-test-two-classes.xml");
+        List<TestResultContainer> testContainers = results.getTestContainers();
+
+        checkBeforeJavadocDescriptions(testContainers, "io.qameta.allure.testng.samples.DescriptionsTest.setUpMethod", "Before method description");
+        checkBeforeJavadocDescriptions(testContainers, "io.qameta.allure.testng.samples.DescriptionsTest", "Before class description");
+
+        checkBeforeJavadocDescriptions(testContainers, "io.qameta.allure.testng.samples.DescriptionsAnotherTest.setUpMethod", "Before method description from DescriptionsAnotherTest");
+        checkBeforeJavadocDescriptions(testContainers, "io.qameta.allure.testng.samples.DescriptionsAnotherTest", "Before class description from DescriptionsAnotherTest");
+    }
+
+    @Feature("Descriptions")
+    @Test(description = "Javadoc descriptions of tests with the same names")
+    public void javadocDescriptionsOfTestsWithTheSameNames() {
+        runTestNgSuites("suites/descriptions-test-two-classes.xml");
+        List<TestResult> testResults = results.getTestResults();
+
+        checkTestJavadocDescriptions(testResults, "io.qameta.allure.testng.samples.DescriptionsTest.test", "Sample test description");
+
+        checkTestJavadocDescriptions(testResults, "io.qameta.allure.testng.samples.DescriptionsAnotherTest.test", "Sample test description from DescriptionsAnotherTest");
     }
 
     @Feature("Failed tests")
@@ -127,7 +222,7 @@ public class AllureTestNgTest {
         assertThat(testResult)
                 .flatExtracting(TestResult::getSteps)
                 .hasSize(2)
-                .flatExtracting(StepResult::getStatus)
+                .extracting(StepResult::getStatus)
                 .contains(Status.PASSED, Status.FAILED);
     }
 
@@ -144,10 +239,37 @@ public class AllureTestNgTest {
                 .hasFieldOrPropertyWithValue("status", Status.BROKEN)
                 .hasFieldOrPropertyWithValue("stage", Stage.FINISHED)
                 .hasFieldOrPropertyWithValue("name", testName);
+        assertThat(testResult.get(0).getStatusDetails()).as("Test Status Details")
+                .hasFieldOrPropertyWithValue("message","Exception")
+                .hasFieldOrProperty("trace");
         assertThat(testResult)
                 .flatExtracting(TestResult::getSteps)
                 .hasSize(2)
-                .flatExtracting(StepResult::getStatus)
+                .extracting(StepResult::getStatus)
+                .contains(Status.PASSED, Status.BROKEN);
+    }
+
+    @Feature("Failed tests")
+    @Story("Broken")
+    @Test(description = "Broken testng - Exception without message")
+    public void brokenTestWithOutMessage() {
+        String testName = "brokenTestWithoutMessage";
+        runTestNgSuites("suites/brokenWithoutMessage.xml");
+        List<TestResult> testResult = results.getTestResults();
+
+        assertThat(testResult).as("Test case result has not been written").hasSize(1);
+        assertThat(testResult.get(0)).as("Unexpected broken testng property")
+                .hasFieldOrPropertyWithValue("status", Status.BROKEN)
+                .hasFieldOrPropertyWithValue("stage", Stage.FINISHED)
+                .hasFieldOrPropertyWithValue("name", testName);
+        assertThat(testResult.get(0).getStatusDetails()).as("Test Status Details")
+                .hasFieldOrPropertyWithValue("message","java.lang.RuntimeException")
+                .hasFieldOrProperty("trace");
+
+        assertThat(testResult)
+                .flatExtracting(TestResult::getSteps)
+                .hasSize(2)
+                .extracting(StepResult::getStatus)
                 .contains(Status.PASSED, Status.BROKEN);
     }
 
@@ -461,7 +583,7 @@ public class AllureTestNgTest {
     public void bddAnnotationsTest() throws Exception {
         runTestNgSuites("suites/bdd-annotations.xml");
 
-        List<String> bddLabels = Arrays.asList("epic", "feature", "story");
+        List<String> bddLabels = asList("epic", "feature", "story");
         List<TestResult> testResults = results.getTestResults();
         assertThat(testResults)
                 .hasSize(2)
@@ -529,7 +651,7 @@ public class AllureTestNgTest {
                 .hasSize(1)
                 .flatExtracting(TestResult::getAttachments)
                 .hasSize(1)
-                .flatExtracting(Attachment::getName)
+                .extracting(Attachment::getName)
                 .containsExactly("String attachment");
     }
 
@@ -882,4 +1004,26 @@ public class AllureTestNgTest {
                 .flatExtracting(FixtureResult::getName)
                 .containsExactly(befores);
     }
+
+    @Step("Check that before fixtures javadoc descriptions refer to correct fixture methods")
+    private static void checkBeforeJavadocDescriptions(List<TestResultContainer> containers, String methodReference, String expectedDescriptionHtml) {
+        assertThat(containers).as("Test containers has not been written")
+                .isNotEmpty()
+                .filteredOn(container -> !container.getBefores().isEmpty())
+                .filteredOn(container -> container.getName().equals(methodReference))
+                .extracting(container -> container.getBefores().get(0).getDescriptionHtml().trim())
+                .as("Javadoc descriptions of befores have been processed incorrectly")
+                .containsOnly(expectedDescriptionHtml);
+    }
+
+    @Step("Check that javadoc descriptions of tests refer to correct test methods")
+    private static void checkTestJavadocDescriptions(List<TestResult> results, String methodReference, String expectedDescriptionHtml) {
+        assertThat(results).as("Test results has not been written")
+                .isNotEmpty()
+                .filteredOn(result -> result.getFullName().equals(methodReference))
+                .extracting(result -> result.getDescriptionHtml().trim())
+                .as("Javadoc descriptions of befores have been processed incorrectly")
+                .containsOnly(expectedDescriptionHtml);
+    }
+
 }
