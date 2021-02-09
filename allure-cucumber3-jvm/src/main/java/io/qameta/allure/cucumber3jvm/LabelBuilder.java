@@ -1,3 +1,18 @@
+/*
+ *  Copyright 2019 Qameta Software OÜ
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
 package io.qameta.allure.cucumber3jvm;
 
 import cucumber.api.TestCase;
@@ -5,24 +20,30 @@ import gherkin.ast.Feature;
 import gherkin.pickles.PickleTag;
 import io.qameta.allure.model.Label;
 import io.qameta.allure.model.Link;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 import static io.qameta.allure.util.ResultsUtils.createFeatureLabel;
-import static io.qameta.allure.util.ResultsUtils.createStoryLabel;
-import static io.qameta.allure.util.ResultsUtils.createSeverityLabel;
-import static io.qameta.allure.util.ResultsUtils.createTmsLink;
+import static io.qameta.allure.util.ResultsUtils.createFrameworkLabel;
+import static io.qameta.allure.util.ResultsUtils.createHostLabel;
 import static io.qameta.allure.util.ResultsUtils.createIssueLink;
+import static io.qameta.allure.util.ResultsUtils.createLanguageLabel;
 import static io.qameta.allure.util.ResultsUtils.createLink;
-import static io.qameta.allure.util.ResultsUtils.getHostName;
-import static io.qameta.allure.util.ResultsUtils.getThreadName;
+import static io.qameta.allure.util.ResultsUtils.createPackageLabel;
+import static io.qameta.allure.util.ResultsUtils.createSeverityLabel;
+import static io.qameta.allure.util.ResultsUtils.createStoryLabel;
+import static io.qameta.allure.util.ResultsUtils.createSuiteLabel;
 import static io.qameta.allure.util.ResultsUtils.createTagLabel;
+import static io.qameta.allure.util.ResultsUtils.createTestClassLabel;
+import static io.qameta.allure.util.ResultsUtils.createThreadLabel;
+import static io.qameta.allure.util.ResultsUtils.createTmsLink;
 
 /**
  * Scenario labels and links builder.
@@ -54,7 +75,7 @@ class LabelBuilder {
             if (tagString.contains(COMPOSITE_TAG_DELIMITER)) {
 
                 final String[] tagParts = tagString.split(COMPOSITE_TAG_DELIMITER, 2);
-                if (StringUtils.isEmpty(tagParts[1])) {
+                if (tagParts.length < 2 || Objects.isNull(tagParts[1]) || tagParts[1].isEmpty()) {
                     // skip empty tags, e.g. '@tmsLink=', to avoid formatter errors
                     continue;
                 }
@@ -93,12 +114,15 @@ class LabelBuilder {
             }
         }
 
-        getScenarioLabels().add(new Label().withName("host").withValue(getHostName()));
-        getScenarioLabels().add(new Label().withName("package").withValue(feature.getName()));
-        getScenarioLabels().add(new Label().withName("suite").withValue(feature.getName()));
-        getScenarioLabels().add(new Label().withName("testClass").withValue(scenario.getName()));
-        getScenarioLabels().add(new Label().withName("thread").withValue(getThreadName()));
-
+        getScenarioLabels().addAll(Arrays.asList(
+                createHostLabel(),
+                createThreadLabel(),
+                createPackageLabel(feature.getName()),
+                createSuiteLabel(feature.getName()),
+                createTestClassLabel(scenario.getName()),
+                createFrameworkLabel("cucumber3jvm"),
+                createLanguageLabel("java")
+        ));
     }
 
     public List<Label> getScenarioLabels() {
@@ -115,6 +139,7 @@ class LabelBuilder {
 
     /**
      * Handle composite named links.
+     *
      * @param tagString Full tag name and value
      */
     private void tryHandleNamedLink(final String tagString) {

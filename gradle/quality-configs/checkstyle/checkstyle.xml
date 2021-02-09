@@ -20,6 +20,10 @@
     <module name="Translation"/>
     <module name="UniqueProperties"/>
 
+    <module name="LineLength">
+        <property name="max" value="120"/>
+    </module>
+
     <module name="TreeWalker">
         <!-- http://checkstyle.sourceforge.net/config_filters.html#SuppressionCommentFilter -->
         <module name="SuppressionCommentFilter"/>
@@ -62,7 +66,7 @@
         <module name="ArrayTrailingComma"/>
         <!--<module name="AvoidInlineConditionals"/>-->
         <module name="CovariantEquals"/>
-        <module name="DeclarationOrder"/>
+        <!--<module name="DeclarationOrder"/>-->
         <module name="DefaultComesLast"/>
         <module name="EmptyStatement"/>
         <module name="EqualsAvoidNull"/>
@@ -101,8 +105,8 @@
         <module name="ParameterAssignment"/>  <!-- more strict version is FinalParameters -->
         <!--<module name="RequireThis"/>-->
         <module name="ReturnCount">
-            <property name="max" value="2"/>
-            <property name="maxForVoid" value="1"/>
+            <property name="max" value="5"/>
+            <property name="maxForVoid" value="3"/>
         </module>
         <module name="SimplifyBooleanExpression"/>
         <module name="SimplifyBooleanReturn"/>
@@ -121,7 +125,7 @@
 
 
         <!-- Imports (http://checkstyle.sourceforge.net/config_imports.html) -->
-        <!--<module name="AvoidStarImport"/>-->
+        <module name="AvoidStarImport"/>
         <!--<module name="AvoidStaticImport"/>-->
         <!--<module name="CustomImportOrder"/>-->
         <module name="IllegalImport"/>
@@ -208,9 +212,6 @@
         <!-- Size Violations (http://checkstyle.sourceforge.net/config_sizes.html) -->
         <module name="AnonInnerLength"/>
         <module name="ExecutableStatementCount"/>
-        <module name="LineLength">
-            <property name="max" value="120"/>
-        </module>
         <module name="MethodCount"/>
         <module name="MethodLength"/>
         <module name="OuterTypeNumber"/>

@@ -1,3 +1,18 @@
+/*
+ *  Copyright 2019 Qameta Software OÜ
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
 package io.qameta.allure.restassured;
 
 import io.qameta.allure.attachment.DefaultAttachmentProcessor;
@@ -24,39 +39,84 @@ import static io.qameta.allure.attachment.http.HttpResponseAttachment.Builder.cr
  */
 public class AllureRestAssured implements OrderedFilter {
 
+    private String requestTemplatePath = "http-request.ftl";
+    private String responseTemplatePath = "http-response.ftl";
+    private String requestAttachmentName = "Request";
+    private String responseAttachmentName;
+
+    public AllureRestAssured setRequestTemplate(final String templatePath) {
+        this.requestTemplatePath = templatePath;
+        return this;
+    }
+
+    public AllureRestAssured setResponseTemplate(final String templatePath) {
+        this.responseTemplatePath = templatePath;
+        return this;
+    }
+
+    public AllureRestAssured setRequestAttachmentName(final String requestAttachmentName) {
+        this.requestAttachmentName = requestAttachmentName;
+        return this;
+    }
+
+    public AllureRestAssured setResponseAttachmentName(final String responseAttachmentName) {
+        this.responseAttachmentName = responseAttachmentName;
+        return this;
+    }
+
+    /**
+     * @deprecated use {@link #setRequestTemplate(String)} instead.
+     * Scheduled for removal in 3.0 release.
+     */
+    @Deprecated
+    public AllureRestAssured withRequestTemplate(final String templatePath) {
+        return setRequestTemplate(templatePath);
+    }
+
+    /**
+     * @deprecated use {@link #setResponseTemplate(String)} instead.
+     * Scheduled for removal in 3.0 release.
+     */
+    @Deprecated
+    public AllureRestAssured withResponseTemplate(final String templatePath) {
+        return setResponseTemplate(templatePath);
+    }
+
     @Override
     public Response filter(final FilterableRequestSpecification requestSpec,
                            final FilterableResponseSpecification responseSpec,
                            final FilterContext filterContext) {
         final Prettifier prettifier = new Prettifier();
-
-
-        final HttpRequestAttachment.Builder requestAttachmentBuilder = create("Request", requestSpec.getURI())
-                .withMethod(requestSpec.getMethod())
-                .withHeaders(toMapConverter(requestSpec.getHeaders()))
-                .withCookies(toMapConverter(requestSpec.getCookies()));
+        final String url = requestSpec.getURI();
+        final HttpRequestAttachment.Builder requestAttachmentBuilder = create(requestAttachmentName, url)
+                .setMethod(requestSpec.getMethod())
+                .setHeaders(toMapConverter(requestSpec.getHeaders()))
+                .setCookies(toMapConverter(requestSpec.getCookies()));
 
         if (Objects.nonNull(requestSpec.getBody())) {
-            requestAttachmentBuilder.withBody(prettifier.getPrettifiedBodyIfPossible(requestSpec));
+            requestAttachmentBuilder.setBody(prettifier.getPrettifiedBodyIfPossible(requestSpec));
         }
 
         final HttpRequestAttachment requestAttachment = requestAttachmentBuilder.build();
 
         new DefaultAttachmentProcessor().addAttachment(
                 requestAttachment,
-                new FreemarkerAttachmentRenderer("http-request.ftl")
+                new FreemarkerAttachmentRenderer(requestTemplatePath)
         );
 
         final Response response = filterContext.next(requestSpec, responseSpec);
-        final HttpResponseAttachment responseAttachment = create(response.getStatusLine())
-                .withResponseCode(response.getStatusCode())
-                .withHeaders(toMapConverter(response.getHeaders()))
-                .withBody(prettifier.getPrettifiedBodyIfPossible(response, response.getBody()))
+        if (Objects.isNull(responseAttachmentName)) {
+            responseAttachmentName = response.getStatusLine();
+        }
+        final HttpResponseAttachment responseAttachment = create(responseAttachmentName)
+                .setResponseCode(response.getStatusCode())
+                .setHeaders(toMapConverter(response.getHeaders()))
+                .setBody(prettifier.getPrettifiedBodyIfPossible(response, response.getBody()))
                 .build();
 
         new DefaultAttachmentProcessor().addAttachment(
                 responseAttachment,
-                new FreemarkerAttachmentRenderer("http-response.ftl")
+                new FreemarkerAttachmentRenderer(responseTemplatePath)
         );
 
         return response;

@@ -1,24 +1,30 @@
+/*
+ *  Copyright 2019 Qameta Software OÜ
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
 package io.qameta.allure.spock;
 
 import io.qameta.allure.Allure;
 import io.qameta.allure.AllureLifecycle;
-import io.qameta.allure.Epic;
-import io.qameta.allure.Feature;
 import io.qameta.allure.Flaky;
-import io.qameta.allure.Issue;
-import io.qameta.allure.Link;
 import io.qameta.allure.Muted;
-import io.qameta.allure.Owner;
-import io.qameta.allure.Severity;
-import io.qameta.allure.Story;
-import io.qameta.allure.TmsLink;
-import io.qameta.allure.model.ExecutableItem;
 import io.qameta.allure.model.Label;
 import io.qameta.allure.model.Parameter;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StatusDetails;
 import io.qameta.allure.model.TestResult;
-import io.qameta.allure.util.ResultsUtils;
+import io.qameta.allure.util.AnnotationUtils;
 import org.junit.runner.Description;
 import org.spockframework.runtime.AbstractRunListener;
 import org.spockframework.runtime.extension.IGlobalExtension;
@@ -38,20 +44,29 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static io.qameta.allure.util.ResultsUtils.createFrameworkLabel;
+import static io.qameta.allure.util.ResultsUtils.createHostLabel;
+import static io.qameta.allure.util.ResultsUtils.createLanguageLabel;
+import static io.qameta.allure.util.ResultsUtils.createPackageLabel;
+import static io.qameta.allure.util.ResultsUtils.createParameter;
+import static io.qameta.allure.util.ResultsUtils.createParentSuiteLabel;
+import static io.qameta.allure.util.ResultsUtils.createSubSuiteLabel;
+import static io.qameta.allure.util.ResultsUtils.createSuiteLabel;
+import static io.qameta.allure.util.ResultsUtils.createTestClassLabel;
+import static io.qameta.allure.util.ResultsUtils.createTestMethodLabel;
+import static io.qameta.allure.util.ResultsUtils.createThreadLabel;
 import static io.qameta.allure.util.ResultsUtils.firstNonEmpty;
-import static io.qameta.allure.util.ResultsUtils.getHostName;
+import static io.qameta.allure.util.ResultsUtils.getProvidedLabels;
 import static io.qameta.allure.util.ResultsUtils.getStatus;
 import static io.qameta.allure.util.ResultsUtils.getStatusDetails;
-import static io.qameta.allure.util.ResultsUtils.getThreadName;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Comparator.comparing;
-
 
 /**
  * @author charlie (Dmitry Baev).
@@ -69,8 +84,9 @@ public class AllureSpock extends AbstractRunListener implements IGlobalExtension
     private final ThreadLocal<String> testResults
             = InheritableThreadLocal.withInitial(() -> UUID.randomUUID().toString());
 
-    private AllureLifecycle lifecycle;
+    private final AllureLifecycle lifecycle;
 
+    @SuppressWarnings("unused")
     public AllureSpock() {
         this(Allure.getLifecycle());
     }
@@ -107,72 +123,59 @@ public class AllureSpock extends AbstractRunListener implements IGlobalExtension
         final String testClassName = feature.getDescription().getClassName();
         final String testMethodName = iteration.getName();
 
-        final List<Label> labels = new ArrayList<>();
-        labels.addAll(Arrays.asList(
-                //Packages grouping
-                new Label().withName("package").withValue(packageName),
-                new Label().withName("testClass").withValue(testClassName),
-                new Label().withName("testMethod").withValue(testMethodName),
-                //xUnit grouping
-                new Label().withName("suite").withValue(specName),
-                //Timeline grouping
-                new Label().withName("host").withValue(getHostName()),
-                new Label().withName("thread").withValue(getThreadName())
+        final List<Label> labels = new ArrayList<>(Arrays.asList(
+                createPackageLabel(packageName),
+                createTestClassLabel(testClassName),
+                createTestMethodLabel(testMethodName),
+                createSuiteLabel(specName),
+                createHostLabel(),
+                createThreadLabel(),
+                createFrameworkLabel("spock"),
+                createLanguageLabel("java")
         ));
         if (Objects.nonNull(subSpec)) {
-            labels.add(new Label().withName("subSuite").withValue(subSpec.getName()));
+            labels.add(createSubSuiteLabel(subSpec.getName()));
         }
         if (Objects.nonNull(superSpec)) {
-            labels.add(new Label().withName("parentSuite").withValue(superSpec.getName()));
+            labels.add(createParentSuiteLabel(superSpec.getName()));
         }
         labels.addAll(getLabels(iteration));
+        labels.addAll(getProvidedLabels());
 
         final TestResult result = new TestResult()
-                .withUuid(uuid)
-                .withHistoryId(getHistoryId(getQualifiedName(iteration), parameters))
-                .withName(firstNonEmpty(
+                .setUuid(uuid)
+                .setHistoryId(getHistoryId(getQualifiedName(iteration), parameters))
+                .setName(firstNonEmpty(
                         testMethodName,
                         feature.getDescription().getDisplayName(),
                         getQualifiedName(iteration)).orElse("Unknown"))
-                .withFullName(getQualifiedName(iteration))
-                .withStatusDetails(new StatusDetails()
-                        .withFlaky(isFlaky(iteration))
-                        .withMuted(isMuted(iteration)))
-                .withParameters(parameters)
-                .withLinks(getLinks(iteration))
-                .withLabels(labels);
+                .setFullName(getQualifiedName(iteration))
+                .setStatusDetails(new StatusDetails()
+                        .setFlaky(isFlaky(iteration))
+                        .setMuted(isMuted(iteration)))
+                .setParameters(parameters)
+                .setLinks(getLinks(iteration))
+                .setLabels(labels);
         processDescription(iteration, result);
         getLifecycle().scheduleTestCase(result);
         getLifecycle().startTestCase(uuid);
     }
 
     private List<Label> getLabels(final IterationInfo iterationInfo) {
-        return Stream.of(
-                getLabels(iterationInfo, Epic.class, ResultsUtils::createLabel),
-                getLabels(iterationInfo, Feature.class, ResultsUtils::createLabel),
-                getLabels(iterationInfo, Story.class, ResultsUtils::createLabel),
-                getLabels(iterationInfo, Severity.class, ResultsUtils::createLabel),
-                getLabels(iterationInfo, Owner.class, ResultsUtils::createLabel)
-        ).reduce(Stream::concat).orElseGet(Stream::empty).collect(Collectors.toList());
+        final Set<Label> labels = AnnotationUtils.getLabels(
+                iterationInfo.getFeature().getDescription().getAnnotations()
+        );
+        labels.addAll(AnnotationUtils.getLabels(
+                iterationInfo.getFeature().getSpec().getDescription().getAnnotations()
+        ));
+        return new ArrayList<>(labels);
     }
 
-    private <T extends Annotation> Stream<Label> getLabels(final IterationInfo iterationInfo, final Class<T> clazz,
-                                                           final Function<T, Label> extractor) {
-        final List<Label> onFeature = getFeatureAnnotations(iterationInfo, clazz).stream()
-                .map(extractor)
-                .collect(Collectors.toList());
-        if (!onFeature.isEmpty()) {
-            return onFeature.stream();
-        }
-        return getSpecAnnotations(iterationInfo, clazz).stream()
-                .map(extractor);
-    }
-
-    private void processDescription(final IterationInfo iterationInfo, final ExecutableItem item) {
+    private void processDescription(final IterationInfo iterationInfo, final TestResult item) {
         final List<io.qameta.allure.Description> annotationsOnFeature = getFeatureAnnotations(
                 iterationInfo, io.qameta.allure.Description.class);
         if (!annotationsOnFeature.isEmpty()) {
-            item.withDescription(annotationsOnFeature.get(0).value());
+            item.setDescription(annotationsOnFeature.get(0).value());
         }
     }
 
@@ -222,14 +225,10 @@ public class AllureSpock extends AbstractRunListener implements IGlobalExtension
     }
 
     private List<io.qameta.allure.model.Link> getLinks(final IterationInfo iteration) {
-        return Stream.of(
-                getSpecAnnotations(iteration, Link.class).stream().map(ResultsUtils::createLink),
-                getFeatureAnnotations(iteration, Link.class).stream().map(ResultsUtils::createLink),
-                getSpecAnnotations(iteration, Issue.class).stream().map(ResultsUtils::createLink),
-                getFeatureAnnotations(iteration, Issue.class).stream().map(ResultsUtils::createLink),
-                getSpecAnnotations(iteration, TmsLink.class).stream().map(ResultsUtils::createLink),
-                getFeatureAnnotations(iteration, TmsLink.class).stream().map(ResultsUtils::createLink)
-        ).reduce(Stream::concat).orElseGet(Stream::empty).collect(Collectors.toList());
+        final List<io.qameta.allure.model.Link> links = new ArrayList<>();
+        links.addAll(AnnotationUtils.getLinks(iteration.getFeature().getDescription().getAnnotations()));
+        links.addAll(AnnotationUtils.getLinks(iteration.getFeature().getSpec().getDescription().getAnnotations()));
+        return links;
     }
 
     private <T extends Annotation> List<T> getAnnotationsOnMethod(final Description result, final Class<T> clazz) {
@@ -281,8 +280,8 @@ public class AllureSpock extends AbstractRunListener implements IGlobalExtension
     public void error(final ErrorInfo error) {
         final String uuid = testResults.get();
         getLifecycle().updateTestCase(uuid, testResult -> testResult
-                .withStatus(getStatus(error.getException()).orElse(null))
-                .withStatusDetails(getStatusDetails(error.getException()).orElse(null))
+                .setStatus(getStatus(error.getException()).orElse(null))
+                .setStatusDetails(getStatusDetails(error.getException()).orElse(null))
         );
     }
 
@@ -302,9 +301,7 @@ public class AllureSpock extends AbstractRunListener implements IGlobalExtension
 
     private List<Parameter> getParameters(final List<String> names, final Object... values) {
         return IntStream.range(0, Math.min(names.size(), values.length))
-                .mapToObj(index -> new Parameter()
-                        .withName(names.get(index))
-                        .withValue(Objects.toString(values[index])))
+                .mapToObj(index -> createParameter(names.get(index), values[index]))
                 .collect(Collectors.toList());
     }
 

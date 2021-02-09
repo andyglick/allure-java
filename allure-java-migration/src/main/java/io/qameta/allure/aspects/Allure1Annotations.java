@@ -1,10 +1,24 @@
+/*
+ *  Copyright 2019 Qameta Software OÜ
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
 package io.qameta.allure.aspects;
 
 import io.qameta.allure.model.Label;
 import io.qameta.allure.model.Link;
 import io.qameta.allure.model.Parameter;
 import io.qameta.allure.model.TestResult;
-import org.apache.commons.lang3.reflect.FieldUtils;
 import org.aspectj.lang.reflect.MethodSignature;
 import ru.yandex.qatools.allure.annotations.Description;
 import ru.yandex.qatools.allure.annotations.Features;
@@ -16,15 +30,14 @@ import ru.yandex.qatools.allure.annotations.TestCaseId;
 import ru.yandex.qatools.allure.annotations.Title;
 import ru.yandex.qatools.allure.model.DescriptionType;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import static io.qameta.allure.util.ResultsUtils.createParameter;
 
 /**
  * Allure labels utils.
@@ -35,14 +48,11 @@ final class Allure1Annotations {
 
     private final MethodSignature signature;
 
-    private final Object target;
-
     private final Object[] args;
 
-    Allure1Annotations(final Object target, final MethodSignature signature, final Object... args) {
+    Allure1Annotations(final MethodSignature signature, final Object... args) {
         this.args = Arrays.copyOf(args, args.length);
         this.signature = signature;
-        this.target = target;
     }
 
     public void updateTitle(final TestResult result) {
@@ -57,7 +67,7 @@ final class Allure1Annotations {
             final List<Label> labels = result.getLabels().stream()
                     .filter(label -> !label.getName().equals(SUITE_LABEL))
                     .collect(Collectors.toList());
-            labels.add(new Label().withName(SUITE_LABEL).withValue(title.value()));
+            labels.add(new Label().setName(SUITE_LABEL).setValue(title.value()));
             result.setLabels(labels);
         }
     }
@@ -83,37 +93,14 @@ final class Allure1Annotations {
     }
 
     public void updateParameters(final TestResult result) {
-        final Map<String, String> parameters = getParameters();
-        result.getParameters().stream()
-                .map(Parameter::getName)
-                .filter(parameters::containsKey)
-                .forEach(parameters::remove);
-        parameters.forEach((n, v) -> result.getParameters().add(new Parameter().withName(n).withValue(v)));
+        result.getParameters().addAll(getMethodParameters());
     }
 
-    private Map<String, String> getParameters() {
-        final Map<String, String> parameters = new HashMap<>();
-        parameters.putAll(getMethodParameters());
-        parameters.putAll(getClassParameters());
-        return parameters;
-    }
-
-    private Map<String, String> getMethodParameters() {
-        final Map<String, String> parameters = new HashMap<>();
-        final String[] names = signature.getParameterNames();
-        for (int i = 0; i < names.length; i++) {
-            parameters.put(names[i], Objects.toString(args[i]));
-        }
-        return parameters;
-    }
-
-    private Map<String, String> getClassParameters() {
-        final List<Field> fields = FieldUtils.getFieldsListWithAnnotation(getType(),
-                ru.yandex.qatools.allure.annotations.Parameter.class);
-
-        return fields.stream().collect(
-                Collectors.toMap(Allure1Utils::getParameterName, f -> Allure1Utils.getParameterValue(f, target))
-        );
+    private List<Parameter> getMethodParameters() {
+        final String[] parameterNames = signature.getParameterNames();
+        return IntStream.range(0, parameterNames.length)
+                .mapToObj(index -> createParameter(parameterNames[index], args[index]))
+                .collect(Collectors.toList());
     }
 
     private Class<?> getType() {

@@ -1,3 +1,18 @@
+/*
+ *  Copyright 2019 Qameta Software OÜ
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
 package io.qameta.allure.cucumberjvm;
 
 import cucumber.runtime.StepDefinitionMatch;
@@ -21,19 +36,28 @@ import io.qameta.allure.model.StatusDetails;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import io.qameta.allure.util.ResultsUtils;
+
 import java.io.ByteArrayInputStream;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.stream.Collectors;
-
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Allure plugin for Cucumber-JVM.
  */
+@SuppressWarnings({
+        "PMD.ExcessiveImports",
+        "ClassFanOutComplexity",
+        "ClassDataAbstractionCoupling",
+        "unused"
+})
 public class AllureCucumberJvm implements Reporter, Formatter {
 
     private static final List<String> SCENARIO_OUTLINE_KEYWORDS = Collections.synchronizedList(new ArrayList<String>());
@@ -43,6 +67,10 @@ public class AllureCucumberJvm implements Reporter, Formatter {
     private static final String SKIPPED = "skipped";
     private static final String PENDING = "pending";
 
+    private static final String TXT_EXTENSION = ".txt";
+    private static final String TEXT_PLAIN = "text/plain";
+
+    private final Map<Scenario, String> scenarioUuids = new ConcurrentHashMap<>();
     private final Deque<Step> gherkinSteps = new LinkedList<>();
     private final AllureLifecycle lifecycle;
     private Feature currentFeature;
@@ -50,10 +78,14 @@ public class AllureCucumberJvm implements Reporter, Formatter {
     private Scenario currentScenario;
 
 
+    @SuppressWarnings("unused")
     public AllureCucumberJvm() {
-        this.lifecycle = Allure.getLifecycle();
-        final List<I18n> i18nList = I18n.getAll();
+        this(Allure.getLifecycle());
+    }
 
+    public AllureCucumberJvm(final AllureLifecycle lifecycle) {
+        this.lifecycle = lifecycle;
+        final List<I18n> i18nList = I18n.getAll();
         i18nList.forEach(i18n -> SCENARIO_OUTLINE_KEYWORDS.addAll(i18n.keywords("scenario_outline")));
     }
 
@@ -76,8 +108,7 @@ public class AllureCucumberJvm implements Reporter, Formatter {
     public void startOfScenarioLifeCycle(final Scenario scenario) {
         this.currentScenario = scenario;
 
-        final Deque<Tag> tags = new LinkedList<>();
-        tags.addAll(scenario.getTags());
+        final Deque<Tag> tags = new LinkedList<>(scenario.getTags());
 
         if (SCENARIO_OUTLINE_KEYWORDS.contains(scenario.getKeyword())) {
             synchronized (gherkinSteps) {
@@ -89,20 +120,23 @@ public class AllureCucumberJvm implements Reporter, Formatter {
 
         final LabelBuilder labelBuilder = new LabelBuilder(currentFeature, scenario, tags);
 
+        final String uuid = UUID.randomUUID().toString();
+        scenarioUuids.put(scenario, uuid);
 
         final TestResult result = new TestResult()
-                .withUuid(scenario.getId())
-                .withHistoryId(StepUtils.getHistoryId(scenario.getId()))
-                .withName(scenario.getName())
-                .withLabels(labelBuilder.getScenarioLabels())
-                .withLinks(labelBuilder.getScenarioLinks());
+                .setUuid(uuid)
+                .setHistoryId(StepUtils.getHistoryId(scenario.getId()))
+                .setFullName(String.format("%s: %s", currentFeature.getName(), scenario.getName()))
+                .setName(scenario.getName())
+                .setLabels(labelBuilder.getScenarioLabels())
+                .setLinks(labelBuilder.getScenarioLinks());
 
         if (!currentFeature.getDescription().isEmpty()) {
-            result.withDescription(currentFeature.getDescription());
+            result.setDescription(currentFeature.getDescription());
         }
 
         lifecycle.scheduleTestCase(result);
-        lifecycle.startTestCase(scenario.getId());
+        lifecycle.startTestCase(uuid);
 
     }
 
@@ -128,16 +162,16 @@ public class AllureCucumberJvm implements Reporter, Formatter {
                 }
             }
             final StepResult stepResult = new StepResult();
-            stepResult.withName(String.format("%s %s", step.getKeyword(), getStepName(step)))
-                    .withStart(System.currentTimeMillis());
+            stepResult.setName(String.format("%s %s", step.getKeyword(), getStepName(step)))
+                    .setStart(System.currentTimeMillis());
 
-            lifecycle.startStep(currentScenario.getId(), stepUtils.getStepUuid(step), stepResult);
+            final String scenarioUuid = scenarioUuids.get(currentScenario);
+            lifecycle.startStep(scenarioUuid, stepUtils.getStepUuid(step), stepResult);
             createDataTableAttachment(step.getRows());
-
         }
     }
 
-
+    @SuppressWarnings("PMD.NcssCount")
     @Override
     public void result(final Result result) {
         if (!isNullMatch) {
@@ -145,35 +179,38 @@ public class AllureCucumberJvm implements Reporter, Formatter {
                     ResultsUtils.getStatusDetails(result.getError()).orElse(new StatusDetails());
             final TagParser tagParser = new TagParser(currentFeature, currentScenario);
             statusDetails
-                    .withFlaky(tagParser.isFlaky())
-                    .withMuted(tagParser.isMuted())
-                    .withKnown(tagParser.isKnown());
+                    .setFlaky(tagParser.isFlaky())
+                    .setMuted(tagParser.isMuted())
+                    .setKnown(tagParser.isKnown());
 
+            final String scenarioUuid = scenarioUuids.get(currentScenario);
             switch (result.getStatus()) {
                 case FAILED:
-                    lifecycle.updateStep(stepResult -> stepResult.withStatus(Status.FAILED));
-                    lifecycle.updateTestCase(currentScenario.getId(), scenarioResult ->
-                            scenarioResult.withStatus(Status.FAILED)
-                                    .withStatusDetails(statusDetails));
+                    final Status status = ResultsUtils.getStatus(result.getError())
+                            .orElse(Status.FAILED);
+                    lifecycle.updateStep(stepResult -> stepResult.setStatus(Status.FAILED));
+                    lifecycle.updateTestCase(scenarioUuid, scenarioResult ->
+                            scenarioResult.setStatus(status)
+                                    .setStatusDetails(statusDetails));
                     lifecycle.stopStep();
                     break;
                 case PENDING:
-                    lifecycle.updateStep(stepResult -> stepResult.withStatus(Status.SKIPPED));
-                    lifecycle.updateTestCase(currentScenario.getId(), scenarioResult ->
-                            scenarioResult.withStatus(Status.SKIPPED)
-                                    .withStatusDetails(statusDetails));
+                    lifecycle.updateStep(stepResult -> stepResult.setStatus(Status.SKIPPED));
+                    lifecycle.updateTestCase(scenarioUuid, scenarioResult ->
+                            scenarioResult.setStatus(Status.SKIPPED)
+                                    .setStatusDetails(statusDetails));
                     lifecycle.stopStep();
                     break;
                 case SKIPPED:
-                    lifecycle.updateStep(stepResult -> stepResult.withStatus(Status.SKIPPED));
+                    lifecycle.updateStep(stepResult -> stepResult.setStatus(Status.SKIPPED));
                     lifecycle.stopStep();
                     break;
                 case PASSED:
-                    lifecycle.updateStep(stepResult -> stepResult.withStatus(Status.PASSED));
+                    lifecycle.updateStep(stepResult -> stepResult.setStatus(Status.PASSED));
                     lifecycle.stopStep();
-                    lifecycle.updateTestCase(currentScenario.getId(), scenarioResult ->
-                            scenarioResult.withStatus(Status.PASSED)
-                                    .withStatusDetails(statusDetails));
+                    lifecycle.updateTestCase(scenarioUuid, scenarioResult ->
+                            scenarioResult.setStatus(Status.PASSED)
+                                    .setStatusDetails(statusDetails));
                     break;
                 default:
                     break;
@@ -190,8 +227,9 @@ public class AllureCucumberJvm implements Reporter, Formatter {
                 stepUtils.fireCanceledStep(gherkinSteps.remove());
             }
         }
-        lifecycle.stopTestCase(scenario.getId());
-        lifecycle.writeTestCase(scenario.getId());
+        final String scenarioUuid = scenarioUuids.remove(scenario);
+        lifecycle.stopTestCase(scenarioUuid);
+        lifecycle.writeTestCase(scenarioUuid);
     }
 
     public String getStepName(final Step step) {
@@ -203,25 +241,30 @@ public class AllureCucumberJvm implements Reporter, Formatter {
 
         if (dataTableRows != null && !dataTableRows.isEmpty()) {
             dataTableRows.forEach(dataTableRow -> {
-                dataTableCsv.append(dataTableRow.getCells().stream().collect(Collectors.joining("\t")));
+                dataTableCsv.append(String.join("\t", dataTableRow.getCells()));
                 dataTableCsv.append('\n');
             });
 
             final String attachmentSource = lifecycle
                     .prepareAttachment("Data table", "text/tab-separated-values", "csv");
             lifecycle.writeAttachment(attachmentSource,
-                    new ByteArrayInputStream(dataTableCsv.toString().getBytes(Charset.forName("UTF-8"))));
+                    new ByteArrayInputStream(dataTableCsv.toString().getBytes(StandardCharsets.UTF_8)));
         }
     }
 
     @Override
     public void embedding(final String string, final byte[] bytes) {
-        //Nothing to do with Allure
+        lifecycle.addAttachment("Screenshot", null, null, new ByteArrayInputStream(bytes));
     }
 
     @Override
     public void write(final String string) {
-        //Nothing to do with Allure
+        lifecycle.addAttachment(
+                "Text output",
+                TEXT_PLAIN,
+                TXT_EXTENSION,
+                Objects.toString(string).getBytes(StandardCharsets.UTF_8)
+        );
     }
 
     @Override

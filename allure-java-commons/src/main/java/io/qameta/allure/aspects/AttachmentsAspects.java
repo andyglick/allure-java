@@ -1,3 +1,18 @@
+/*
+ *  Copyright 2019 Qameta Software OÜ
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
 package io.qameta.allure.aspects;
 
 import io.qameta.allure.Allure;
@@ -19,28 +34,18 @@ import static io.qameta.allure.util.NamingUtils.processNameTemplate;
  * Aspects (AspectJ) for handling {@link Attachment}.
  *
  * @author Dmitry Baev charlie@yandex-team.ru
- *         Date: 24.10.13
+ * Date: 24.10.13
  */
 @Aspect
 public class AttachmentsAspects {
 
-    private static AllureLifecycle lifecycle;
-
-    public static AllureLifecycle getLifecycle() {
-        if (Objects.isNull(lifecycle)) {
-            lifecycle = Allure.getLifecycle();
+    private static final InheritableThreadLocal<AllureLifecycle> LIFECYCLE =
+            new InheritableThreadLocal<AllureLifecycle>() {
+        @Override
+        protected AllureLifecycle initialValue() {
+            return Allure.getLifecycle();
         }
-        return lifecycle;
-    }
-
-    /**
-     * Sets lifecycle for aspects. Usually used in tests.
-     *
-     * @param lifecycle allure lifecycle to set.
-     */
-    public static void setLifecycle(final AllureLifecycle lifecycle) {
-        AttachmentsAspects.lifecycle = lifecycle;
-    }
+    };
 
     /**
      * Pointcut for things annotated with {@link Attachment}.
@@ -75,7 +80,20 @@ public class AttachmentsAspects {
 
         final String name = attachment.value().isEmpty()
                 ? methodSignature.getName()
-                : processNameTemplate(attachment.value(), getParametersMap(methodSignature, joinPoint.getArgs()));
+                : processNameTemplate(attachment.value(), getParametersMap(joinPoint));
         getLifecycle().addAttachment(name, attachment.type(), attachment.fileExtension(), bytes);
+    }
+
+    /**
+     * For tests only.
+     *
+     * @param allure allure lifecycle to set.
+     */
+    public static void setLifecycle(final AllureLifecycle allure) {
+        LIFECYCLE.set(allure);
+    }
+
+    public static AllureLifecycle getLifecycle() {
+        return LIFECYCLE.get();
     }
 }

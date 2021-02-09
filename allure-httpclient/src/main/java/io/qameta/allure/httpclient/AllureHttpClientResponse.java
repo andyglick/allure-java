@@ -1,3 +1,18 @@
+/*
+ *  Copyright 2019 Qameta Software OÜ
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
 package io.qameta.allure.httpclient;
 
 import io.qameta.allure.attachment.AttachmentData;
@@ -46,15 +61,19 @@ public class AllureHttpClientResponse implements HttpResponseInterceptor {
                         final HttpContext context) throws IOException {
 
         final HttpResponseAttachment.Builder builder = create("Response")
-                .withResponseCode(response.getStatusLine().getStatusCode());
+                .setResponseCode(response.getStatusLine().getStatusCode());
 
         Stream.of(response.getAllHeaders())
-                .forEach(header -> builder.withHeader(header.getName(), header.getValue()));
+                .forEach(header -> builder.setHeader(header.getName(), header.getValue()));
 
-        final LoggableEntity loggableEntity = new LoggableEntity(response.getEntity());
-        response.setEntity(loggableEntity);
+        if (response.getEntity() != null) {
+            final LoggableEntity loggableEntity = new LoggableEntity(response.getEntity());
+            response.setEntity(loggableEntity);
 
-        builder.withBody(loggableEntity.getBody());
+            builder.setBody(loggableEntity.getBody());
+        } else {
+            builder.setBody("No body present");
+        }
 
         final HttpResponseAttachment responseAttachment = builder.build();
         processor.addAttachment(responseAttachment, renderer);

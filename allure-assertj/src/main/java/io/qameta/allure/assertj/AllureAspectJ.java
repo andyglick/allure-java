@@ -1,24 +1,42 @@
+/*
+ *  Copyright 2019 Qameta Software OÜ
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
 package io.qameta.allure.assertj;
 
 import io.qameta.allure.Allure;
 import io.qameta.allure.AllureLifecycle;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StepResult;
-import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.annotation.Around;
+import io.qameta.allure.util.ObjectUtils;
+import org.aspectj.lang.JoinPoint;
+import org.aspectj.lang.annotation.After;
+import org.aspectj.lang.annotation.AfterReturning;
+import org.aspectj.lang.annotation.AfterThrowing;
 import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Before;
+import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.qameta.allure.util.ResultsUtils.getStatus;
 import static io.qameta.allure.util.ResultsUtils.getStatusDetails;
-import static java.util.Objects.nonNull;
 
 /**
  * @author charlie (Dmitry Baev).
@@ -30,31 +48,71 @@ public class AllureAspectJ {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AllureAspectJ.class);
 
-    private static AllureLifecycle lifecycle;
+    private static InheritableThreadLocal<AllureLifecycle> lifecycle = new InheritableThreadLocal<AllureLifecycle>() {
+        @Override
+        protected AllureLifecycle initialValue() {
+            return Allure.getLifecycle();
+        }
+    };
 
-    @Around("execution(* org.assertj.core.api.AbstractAssert+.*(..)) "
-            + "|| execution(* org.assertj.core.api.Assertions.assertThat(..))")
-    public Object step(final ProceedingJoinPoint joinPoint) throws Throwable {
+    @Pointcut("execution(public org.assertj.core.api.AbstractAssert.new(..))")
+    public void anyAssertCreation() {
+        //pointcut body, should be empty
+    }
+
+    @Pointcut("execution(* org.assertj.core.api.AssertJProxySetup.*(..))")
+    public void proxyMethod() {
+        //pointcut body, should be empty
+    }
+
+    @Pointcut("execution(public * org.assertj.core.api.AbstractAssert+.*(..)) && !proxyMethod()")
+    public void anyAssert() {
+        //pointcut body, should be empty
+    }
+
+    @After("anyAssertCreation()")
+    public void logAssertCreation(final JoinPoint joinPoint) {
+        final String actual = joinPoint.getArgs().length > 0
+                ? ObjectUtils.toString(joinPoint.getArgs()[0])
+                : "<?>";
+        final String uuid = UUID.randomUUID().toString();
+        final String name = String.format("assertThat \'%s\'", actual);
+
+        final StepResult result = new StepResult()
+                .setName(name)
+                .setStatus(Status.PASSED);
+
+        getLifecycle().startStep(uuid, result);
+        getLifecycle().stopStep(uuid);
+    }
+
+    @Before("anyAssert()")
+    public void stepStart(final JoinPoint joinPoint) {
         final MethodSignature methodSignature = (MethodSignature) joinPoint.getSignature();
+
+        final String uuid = UUID.randomUUID().toString();
         final String name = joinPoint.getArgs().length > 0
                 ? String.format("%s \'%s\'", methodSignature.getName(), arrayToString(joinPoint.getArgs()))
                 : methodSignature.getName();
-        final String uuid = UUID.randomUUID().toString();
+
         final StepResult result = new StepResult()
-                .withName(name);
+                .setName(name);
+
         getLifecycle().startStep(uuid, result);
-        try {
-            final Object proceed = joinPoint.proceed();
-            getLifecycle().updateStep(uuid, s -> s.withStatus(Status.PASSED));
-            return proceed;
-        } catch (Throwable e) {
-            getLifecycle().updateStep(uuid, s -> s
-                    .withStatus(getStatus(e).orElse(Status.BROKEN))
-                    .withStatusDetails(getStatusDetails(e).orElse(null)));
-            throw e;
-        } finally {
-            getLifecycle().stopStep(uuid);
-        }
+    }
+
+    @AfterThrowing(pointcut = "anyAssert()", throwing = "e")
+    public void stepFailed(final Throwable e) {
+        getLifecycle().updateStep(s -> s
+                .setStatus(getStatus(e).orElse(Status.BROKEN))
+                .setStatusDetails(getStatusDetails(e).orElse(null)));
+        getLifecycle().stopStep();
+    }
+
+    @AfterReturning(pointcut = "anyAssert()")
+    public void stepStop() {
+        getLifecycle().updateStep(s -> s.setStatus(Status.PASSED));
+        getLifecycle().stopStep();
     }
 
     /**
@@ -63,21 +121,16 @@ public class AllureAspectJ {
      * @param allure allure lifecycle to set.
      */
     public static void setLifecycle(final AllureLifecycle allure) {
-        lifecycle = allure;
+        lifecycle.set(allure);
     }
 
     public static AllureLifecycle getLifecycle() {
-        if (Objects.isNull(lifecycle)) {
-            lifecycle = Allure.getLifecycle();
-        }
-        return lifecycle;
+        return lifecycle.get();
     }
 
     private static String arrayToString(final Object... array) {
         return Stream.of(array)
-                     .map(object -> nonNull(object) && object.getClass().isArray()
-                             ? arrayToString((Object[]) object)
-                             : Objects.toString(object))
-                     .collect(Collectors.joining(" "));
+                .map(ObjectUtils::toString)
+                .collect(Collectors.joining(" "));
     }
 }

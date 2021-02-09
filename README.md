@@ -17,7 +17,7 @@ The repository contains new versions of adaptors for JVM-based test frameworks.
 
 All the artifacts are deployed to `https://dl.bintray.com/qameta/maven`.
 
-## TestNG 
+## TestNG
 
 The new TestNG adaptors is pretty much ready. To use the adaptor you should add the following dependency:
 
@@ -70,6 +70,10 @@ Listener for Selenide, that logging steps for Allure:
 Usage example:
 ```
 SelenideLogger.addListener("AllureSelenide", new AllureSelenide().screenshots(true).savePageSource(false));
+
+Capture selenium logs:
+SelenideLogger.addListener("AllureSelenide", new AllureSelenide().enableLogs(LogType.BROWSER, Level.ALL));
+https://github.com/SeleniumHQ/selenium/wiki/Logging
 ```
 
 
@@ -89,9 +93,11 @@ Usage example:
 ```
 .filter(new AllureRestAssured())
 ```
-You can specify custom templateName:
+You can specify custom templates, which should be placed in src/main/resources/tpl folder:
 ```
-.filter(new AllureRestAssured().withTemplate("/templates/custom_template.ftl"))
+.filter(new AllureRestAssured()
+        .withRequestTemplate("custom-http-request.ftl")
+        .withResponseTemplate("custom-http-response.ftl"))
 ```
 
 ## OkHttp
@@ -136,3 +142,30 @@ Usage example:
 .addInterceptorLast(new AllureHttpClientResponse());
 ```
 
+## JAX-RS Filter
+
+Filter that can be used with JAX-RS compliant clients such as RESTeasy and Jersey
+
+```xml
+<dependency>
+   <groupId>io.qameta.allure</groupId>
+   <artifactId>allure-jax-rs</artifactId>
+   <version>$LATEST_VERSION</version>
+</dependency>
+```
+
+Usage example:
+```
+.register(AllureJaxRs.class)
+```
+
+## JsonUnit
+JsonPatchMatcher is extension of JsonUnit matcher, that generates pretty html attachment for differences based on [json diff patch](https://github.com/benjamine/jsondiffpatch/blob/master/docs/deltas.md).
+
+```xml
+<dependency>
+   <groupId>io.qameta.allure</groupId>
+   <artifactId>allure-jsonunit</artifactId>
+   <version>$LATEST_VERSION</version>
+</dependency>
+```
